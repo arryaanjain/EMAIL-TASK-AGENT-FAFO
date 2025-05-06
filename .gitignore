@@ -1,0 +1,51 @@
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+
+# Virtual environment
+venv/
+*.env/
+
+# .env file for sensitive information
+.env
+
+# IDE settings
+.vscode/
+.idea/
+
+# MacOS system files
+.DS_Store
+
+# Windows system files
+Thumbs.db
+
+# Logs and temp files
+*.log
+*.pot
+*.mo
+*.swp
+*.bak
+*.tmp
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+
+# Test results
+nosetests.xml
+coverage.xml
+*.cover
+*.tox
+*.nox
+*.coverage
+*.hypothesis/
+
+# Distribution packages
+*.egg
+*.egg-info/
+dist/
+build/
+*.tar.gz
+*.whl

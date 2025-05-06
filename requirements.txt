@@ -1,0 +1,6 @@
+openai==0.28
+python-dotenv==1.1.0
+langchain
+imapclient
+beautifulsoup4
+chardet
