@@ -4,3 +4,4 @@ langchain
 imapclient
 beautifulsoup4
 chardet
+google-generativeai
