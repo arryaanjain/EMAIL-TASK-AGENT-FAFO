@@ -2,10 +2,12 @@ from flask import Flask, request, jsonify
 from pipeline.email_pipeline import run_email_pipeline
 from utils.email_reader import fetch_unread_emails
 import json
-
 import re
+from flask_cors import CORS
 
 app = Flask(__name__)
+
+CORS(app)
 
 @app.route('/api/summarize_email', methods=['POST'])
 def summarize_email():

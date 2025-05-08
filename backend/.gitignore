@@ -1,8 +1,6 @@
-# Python bytecode
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
+# Python bytecode - applies recursively
+**/__pycache__/
+**/*.py[cod]
 *.pdb
 
 # Virtual environment
