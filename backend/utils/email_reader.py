@@ -8,7 +8,7 @@ import os
 load_dotenv()
 
 # Hard token cap for the script
-MAX_TOKENS_TOTAL = 20000
+MAX_TOKENS_TOTAL = 4000
 tokens_used = 0
 
 def fetch_unread_emails():
