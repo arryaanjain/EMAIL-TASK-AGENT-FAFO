@@ -5,10 +5,23 @@ import json
 import re
 from flask_cors import CORS
 
+#auth and calendar using MS
+from config import Config
+from db import db
+from routes.auth_routes import auth_bp
+from routes.calendar_routes import calendar_bp
+
+
 app = Flask(__name__)
-
 CORS(app)
+app.config.from_object(Config)
 
+db.init_app(app)
+
+app.register_blueprint(auth_bp)
+app.register_blueprint(calendar_bp)
+
+#my OLD apis, TODO: model-routes architecture
 @app.route('/api/summarize_email', methods=['POST'])
 def summarize_email():
     data = request.get_json()

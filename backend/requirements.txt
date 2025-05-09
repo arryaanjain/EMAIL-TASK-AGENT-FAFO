@@ -8,3 +8,6 @@ chardet
 google-generativeai==0.8.5
 google-ai-generativelanguage==0.6.15
 flask
+requests
+Flask-SQLAlchemy
+psycopg2-binary
