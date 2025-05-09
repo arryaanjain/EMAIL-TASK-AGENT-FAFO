@@ -11,3 +11,4 @@ flask
 requests
 Flask-SQLAlchemy
 psycopg2-binary
+config
