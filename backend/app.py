@@ -20,6 +20,7 @@ from routes.calendar_routes import calendar_bp
 
 def create_app():
     app = Flask(__name__)
+    app.secret_key = "super-secret-and-unique-key"
     CORS(app)
 
     # Load configuration
@@ -31,6 +32,10 @@ def create_app():
     # Register blueprints
     app.register_blueprint(auth_bp)
     app.register_blueprint(calendar_bp)
+
+    # Create tables
+    with app.app_context():
+        db.create_all()
 
     # Legacy Routes (Consider moving to blueprints later)
     @app.route('/api/summarize_email', methods=['POST'])

@@ -1,9 +1,10 @@
-from flask import Blueprint, redirect, request, jsonify
+from flask import Blueprint, redirect, request, session, jsonify
 from config import Config
 from services.token_utils import get_token_data
 from datetime import datetime, timedelta
 import requests
 import urllib.parse
+import jwt
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
@@ -23,43 +24,31 @@ def login():
 
 # Step 2: Handle callback from Microsoft
 @auth_bp.route("/callback")
-def callback():
-    from models.user import User
-    from db import db
+def auth_callback():
     code = request.args.get("code")
     if not code:
-        return jsonify({"error": "No code in request"}), 400
+        return "Authorization code not found", 400
 
-    token_data = get_token_data(code)
+    token_data = {
+        "grant_type": "authorization_code",
+        "client_id": Config.CLIENT_ID,
+        "client_secret": Config.CLIENT_SECRET,
+        "code": code,
+        "redirect_uri": Config.REDIRECT_URI,
+        "scope": " ".join(Config.SCOPE),
+    }
 
-    if "access_token" not in token_data:
-        return jsonify({"error": "Failed to fetch token", "details": token_data}), 400
+    # Exchange code for tokens
+    response = requests.post(Config.TOKEN_ENDPOINT, data=token_data)
+    if response.status_code != 200:
+        return f"Token exchange failed: {response.text}", 400
 
-    # Decode the access token to get user email
-    headers = {'Authorization': f"Bearer {token_data['access_token']}"}
-    user_info = requests.get("https://graph.microsoft.com/v1.0/me", headers=headers).json()
-    email = user_info.get("userPrincipalName")
+    token_json = response.json()
+    access_token = token_json.get("access_token")
+    id_token = token_json.get("id_token")
 
-    if not email:
-        return jsonify({"error": "Could not retrieve user email"}), 400
+    # Store in session or DB if needed
+    session["access_token"] = access_token
+    session["id_token"] = id_token
 
-    expires_in = int(token_data['expires_in'])
-    expiry_time = datetime.utcnow() + timedelta(seconds=expires_in)
-
-    # Save or update user in DB
-    user = User.query.filter_by(email=email).first()
-    if user:
-        user.access_token = token_data['access_token']
-        user.refresh_token = token_data['refresh_token']
-        user.token_expires = expiry_time
-    else:
-        user = User(
-            email=email,
-            access_token=token_data['access_token'],
-            refresh_token=token_data['refresh_token'],
-            token_expires=expiry_time,
-        )
-        db.session.add(user)
-
-    db.session.commit()
-    return jsonify({"message": f"User {email} logged in successfully."})
+    return f"Access token acquired! ✅", 200
