@@ -21,7 +21,15 @@ from routes.calendar_routes import calendar_bp
 def create_app():
     app = Flask(__name__)
     app.secret_key = "super-secret-and-unique-key"
-    CORS(app)
+    CORS(app, 
+        resources={
+            r"/api/*": {
+                "origins": ["http://localhost:5173", "http://127.0.0.1:5173"],
+                "supports_credentials": True,
+                "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+                "allow_headers": ["Content-Type", "Authorization"]
+            }
+        })
 
     # Load configuration
     app.config.from_object(Config)

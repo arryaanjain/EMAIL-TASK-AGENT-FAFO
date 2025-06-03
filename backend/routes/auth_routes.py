@@ -38,17 +38,42 @@ def auth_callback():
         "scope": " ".join(Config.SCOPE),
     }
 
-    # Exchange code for tokens
     response = requests.post(Config.TOKEN_ENDPOINT, data=token_data)
     if response.status_code != 200:
         return f"Token exchange failed: {response.text}", 400
 
     token_json = response.json()
-    access_token = token_json.get("access_token")
-    id_token = token_json.get("id_token")
+    # Return tokens in URL parameters
+    tokens = {
+        "access_token": token_json.get("access_token"),
+        "id_token": token_json.get("id_token")
+    }
+    redirect_url = f"{Config.FRONT_END_BASE_URL}/auth/callback?{urllib.parse.urlencode(tokens)}"
+    return redirect(redirect_url)
 
-    # Store in session or DB if needed
-    session["access_token"] = access_token
-    session["id_token"] = id_token
+@auth_bp.route("/logout")
+def logout():
+    # Clear session
+    session.clear()
+    
+    # Construct Azure B2C logout URL
+    logout_url = f"https://{Config.TENANT}.b2clogin.com/{Config.TENANT}.onmicrosoft.com/{Config.POLICY}/oauth2/v2.0/logout"
+    params = {
+        "post_logout_redirect_uri": f"{Config.FRONT_END_BASE_URL}/login"
+    }
+    
+    return redirect(f"{logout_url}?{urllib.parse.urlencode(params)}")
 
-    return f"Access token acquired! ✅", 200
+@auth_bp.route("/status")
+def auth_status():
+    # Get token from Authorization header
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return jsonify({"isAuthenticated": False})
+    
+    token = auth_header.split(' ')[1]
+    try:
+        # Validate token here
+        return jsonify({"isAuthenticated": True})
+    except:
+        return jsonify({"isAuthenticated": False})
