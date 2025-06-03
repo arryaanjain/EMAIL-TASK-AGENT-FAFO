@@ -12,3 +12,5 @@ requests
 Flask-SQLAlchemy
 psycopg2-binary
 config
+flask_cors
+PyJWT
