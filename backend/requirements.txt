@@ -14,3 +14,11 @@ psycopg2-binary
 config
 flask_cors
 PyJWT
+
+fastapi 
+uvicorn 
+python-jose[cryptography] 
+python-multipart
+pydantic[email]
+google-cloud-aiplatform 
+google-auth
