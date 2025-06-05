@@ -4,16 +4,15 @@ import { ReactNode } from 'react';
 
 const ProtectedRoute: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
-  
-  console.log('ProtectedRoute state:', { isAuthenticated, loading });
+  const token = localStorage.getItem('access_token');
 
   if (loading) {
-    return <div>Loading...</div>;
+    return <div>Loading authentication status...</div>;
   }
 
-  if (!isAuthenticated) {
-    console.log('Not authenticated, redirecting to login');
-    return <Navigate to="/login" />;
+  if (!isAuthenticated || !token) {
+    localStorage.clear();
+    return <Navigate to="/login" replace />;
   }
 
   return <>{children}</>;

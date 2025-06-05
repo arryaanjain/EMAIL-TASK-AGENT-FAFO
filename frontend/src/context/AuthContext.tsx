@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import apiClient from '../utils/axiosInterceptor';
 
 interface AuthContextType {
   isAuthenticated: boolean;
   loading: boolean;
-  login: (tokens: { access_token: string; id_token: string }) => void;
-  logout: () => void;
+  login: (tokens: { access_token: string; id_token: string }) => Promise<boolean>;
+  logout: () => Promise<void>;
   user: any | null;
 }
 
@@ -15,8 +16,8 @@ interface AuthProviderProps {
 const AuthContext = createContext<AuthContextType>({
   isAuthenticated: false,
   loading: false,
-  login: () => {},
-  logout: () => {},
+  login: async () => false,
+  logout: async () => {},
   user: null
 });
 
@@ -25,91 +26,74 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
 
-  const login = async (tokens: { access_token: string; id_token: string }) => {
+const login = async (tokens: { access_token: string; id_token: string }): Promise<boolean> => {
+  try {
+    console.log('Starting login process...');
+    
+    // Store tokens
+    localStorage.setItem('access_token', tokens.access_token);
+    localStorage.setItem('id_token', tokens.id_token);
+
+    // Configure axios for the status check
+    apiClient.defaults.headers.common['Authorization'] = `Bearer ${tokens.access_token}`;
+
+    // Check authentication status
+    const { data } = await apiClient.get('/api/auth/status');
+    console.log('Status check response:', data);
+    
+    if (!data.isAuthenticated) {
+      throw new Error('Backend authentication failed');
+    }
+
+    setUser(data.user);
+    setIsAuthenticated(true);
+    return true;
+  } catch (error) {
+    console.error('Login process failed:', error);
+    localStorage.clear();
+    delete apiClient.defaults.headers.common['Authorization'];
+    setIsAuthenticated(false);
+    setUser(null);
+    throw error;
+  }
+};
+
+  const checkAuthStatus = async () => {
     try {
-      // Store tokens
-      localStorage.setItem('access_token', tokens.access_token);
-      localStorage.setItem('id_token', tokens.id_token);
-
-      // Verify tokens immediately
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/auth/status`, {
-        headers: {
-          'Authorization': `Bearer ${tokens.access_token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Token validation failed');
+      const token = localStorage.getItem('access_token');
+      if (!token) {
+        throw new Error('No token found');
       }
 
-      const data = await response.json();
-      if (!data.isAuthenticated || !data.user) {
-        throw new Error('Invalid authentication response');
+      const { data } = await apiClient.get('/api/auth/status');
+      console.log('Auth check response:', data);
+
+      if (!data.isAuthenticated) {
+        throw new Error('Not authenticated');
       }
 
-      setUser(data.user);
       setIsAuthenticated(true);
+      setUser(data.user);
     } catch (error) {
-      console.error('Login failed:', error);
-      // Clean up on failure
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('id_token');
+      console.error('Auth check failed:', error);
+      localStorage.clear();
       setIsAuthenticated(false);
       setUser(null);
-      throw error; // Re-throw to handle in UI
+    } finally {
+      setLoading(false);
     }
   };
 
   const logout = async () => {
+    console.log('Logging out...');
     try {
-      // Call backend logout endpoint
-      await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/auth/logout`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        }
-      });
+      await apiClient.get('/api/auth/logout');
+    } catch (error) {
+      console.error('Logout API call failed:', error);
     } finally {
-      // Clear local storage regardless of logout API success
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('id_token');
+      localStorage.clear();
       setIsAuthenticated(false);
       setUser(null);
-    }
-  };
-
-  const checkAuthStatus = async () => {
-    try {
-      const access_token = localStorage.getItem('access_token');
-      if (!access_token) {
-        setIsAuthenticated(false);
-        setUser(null);
-        return;
-      }
-
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/auth/status`, {
-        headers: {
-          'Authorization': `Bearer ${access_token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Status check failed');
-      }
-
-      const data = await response.json();
-      if (data.isAuthenticated && data.user) {
-        setIsAuthenticated(true);
-        setUser(data.user);
-      } else {
-        throw new Error('Invalid auth status');
-      }
-    } catch (error) {
-      console.error('Auth check failed:', error);
-      await logout();
-    } finally {
-      setLoading(false);
     }
   };
 
