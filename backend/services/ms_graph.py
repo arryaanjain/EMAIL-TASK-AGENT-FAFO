@@ -1,22 +1,25 @@
-import requests
+import requests, httpx
 from services.token_utils import refresh_access_token
-from db import db
 from datetime import datetime, timedelta
 from fastapi import HTTPException
+from sqlalchemy.orm import Session
+from db import get_db
 
-def ensure_valid_token(user):
+async def ensure_valid_token(user, db: Session):
+    """Ensure user token is valid, refresh if needed"""
     if user.token_expires <= datetime.utcnow():
         new_token = refresh_access_token(user.refresh_token)
         if "access_token" in new_token:
             user.access_token = new_token["access_token"]
             user.refresh_token = new_token["refresh_token"]
             user.token_expires = datetime.utcnow() + timedelta(seconds=int(new_token["expires_in"]))
-            db.session.commit()
+            db.commit()
         else:
-            raise Exception("Could not refresh access token")
+            raise HTTPException(status_code=401, detail="Could not refresh access token")
 
-def get_calendar_events(user):
-    ensure_valid_token(user)
+async def get_calendar_events(user, db: Session):
+    """Get user's calendar events"""
+    await ensure_valid_token(user, db)
     headers = {
         "Authorization": f"Bearer {user.access_token}",
         "Content-Type": "application/json"
@@ -24,25 +27,31 @@ def get_calendar_events(user):
     response = requests.get("https://graph.microsoft.com/v1.0/me/events", headers=headers)
     return response.json()
 
-def create_calendar_event(user, event_data):
-    ensure_valid_token(user)
+async def create_calendar_event(user, event_data, db: Session):
+    """Create a new calendar event"""
+    await ensure_valid_token(user, db)
     headers = {
         "Authorization": f"Bearer {user.access_token}",
         "Content-Type": "application/json"
     }
-    response = requests.post("https://graph.microsoft.com/v1.0/me/events", headers=headers, json=event_data)
+    response = requests.post(
+        "https://graph.microsoft.com/v1.0/me/events", 
+        headers=headers, 
+        json=event_data
+    )
     return response.json()
 
-def fetch_unread_emails(user, limit: int = 10):
+async def fetch_unread_emails(user, db: Session, limit: int = 10):
     """
     Fetch unread emails from user's inbox using Microsoft Graph API
     Args:
         user: User object containing access token
+        db: Database session
         limit: Number of emails to fetch (default: 10)
     Returns:
         List of unread emails
     """
-    ensure_valid_token(user)
+    await ensure_valid_token(user, db)
     
     headers = {
         "Authorization": f"Bearer {user.access_token}",
@@ -51,18 +60,20 @@ def fetch_unread_emails(user, limit: int = 10):
 
     # Build query parameters
     params = {
-        "$top": limit,  # Number of emails to return
-        "$filter": "isRead eq false",  # Only unread emails
-        "$orderby": "receivedDateTime desc",  # Most recent first
-        "$select": "id,subject,bodyPreview,from,receivedDateTime,hasAttachments"  # Fields to return
+        "$top": limit,
+        "$filter": "isRead eq false",
+        "$orderby": "receivedDateTime desc",
+        "$select": "id,subject,bodyPreview,from,receivedDateTime,hasAttachments"
     }
 
     try:
-        response = requests.get(
-            "https://graph.microsoft.com/v1.0/me/messages",
-            headers=headers,
-            params=params
-        )
+        # Use httpx instead of requests for async support
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://graph.microsoft.com/v1.0/me/messages",
+                headers=headers,
+                params=params
+            )
         
         if response.status_code != 200:
             raise HTTPException(
@@ -88,5 +99,5 @@ def fetch_unread_emails(user, limit: int = 10):
 
         return formatted_emails
 
-    except requests.RequestException as e:
+    except httpx.RequestError as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch emails: {str(e)}")
