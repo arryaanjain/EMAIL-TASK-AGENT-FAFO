@@ -1,8 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api import auth, email, tasks
+from db import init_db
 
 app = FastAPI(title="Email Task Agent")
+
+# Database initialization
+init_db(app)
 
 # CORS Configuration
 app.add_middleware(
@@ -20,4 +24,4 @@ app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=5000, reload=True)
+    uvicorn.run("app:app", host="0.0.0.0", port=5000, reload=True)
