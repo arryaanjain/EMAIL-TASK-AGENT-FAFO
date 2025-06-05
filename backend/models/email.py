@@ -1,52 +1,33 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 
-class EmailAddress(BaseModel):
-    """Model for email addresses"""
-    name: Optional[str] = None
-    address: EmailStr
+class EmailFilter(BaseModel):
+    is_read: Optional[bool] = None
+    has_attachments: Optional[bool] = None
+    from_date: Optional[datetime] = None
+    to_date: Optional[datetime] = None
+    labels: Optional[List[str]] = []
 
-class Attachment(BaseModel):
-    """Model for email attachments"""
-    id: str
-    name: str
-    content_type: str
-    size: int
+class EmailStats(BaseModel):
+    unread_count: int
+    task_count: int
+    meetings_today: int
 
-class EmailBase(BaseModel):
-    """Base email model with common fields"""
-    id: str
-    subject: str
-    sender: EmailAddress
-    received_time: datetime
-    is_read: bool = False
-
-class EmailProcess(BaseModel):
-    """Model for email processing request"""
+class EmailCreate(BaseModel):
     subject: str
     body: str
-    sender: EmailAddress
-    received_time: datetime = Field(default_factory=datetime.now)
-    importance: str = "normal"
+    to: List[str]
+    cc: Optional[List[str]] = []
+    bcc: Optional[List[str]] = []
+    attachments: Optional[List[str]] = []
 
-class EmailResponse(EmailBase):
-    """Model for email list response"""
-    body_preview: str
-    has_attachments: bool
-    attachments: Optional[List[Attachment]] = None
-    categories: Optional[List[str]] = None
-
-class EmailDetail(EmailResponse):
-    """Model for detailed email view"""
-    body: str
-    cc_recipients: Optional[List[EmailAddress]] = None
-    bcc_recipients: Optional[List[EmailAddress]] = None
-    conversation_id: Optional[str] = None
-
-class EmailProcessResponse(BaseModel):
-    """Model for email processing response"""
-    summary: str
-    tasks: List[str]
-    confidence_score: float = Field(ge=0.0, le=1.0)
-    processed_at: datetime = Field(default_factory=datetime.now)
+class EmailResponse(BaseModel):
+    id: str
+    subject: str
+    from_: str
+    date: datetime
+    snippet: str
+    is_read: bool
+    labels: Optional[List[str]] = []
+    folder: str

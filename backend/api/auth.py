@@ -13,6 +13,9 @@ from datetime import datetime, timedelta
 from db.models.user import User
 from db import get_db
 
+import base64
+import json
+
 # Security setup
 security = HTTPBearer()
 router = APIRouter()
@@ -30,8 +33,29 @@ async def get_current_user(
     
     try:
         token = credentials.credentials
-        # Find user by access token
-        user = db.query(User).filter_by(access_token=token).first()
+        
+        # Decode token to get email
+        token_parts = token.split('.')
+        if len(token_parts) != 3:
+            raise credentials_exception
+            
+        # Fix padding for base64
+        payload = token_parts[1] + '=' * (-len(token_parts[1]) % 4)
+        decoded_payload = base64.b64decode(payload)
+        token_info = json.loads(decoded_payload)
+        
+        # Extract email from token
+        email = (
+            token_info.get("emails", [None])[0] or
+            token_info.get("email") or
+            token_info.get("preferred_username")
+        )
+        
+        if not email:
+            raise credentials_exception
+            
+        # Find user by email
+        user = db.query(User).filter_by(email=email).first()
         
         if not user or user.token_expires < datetime.utcnow():
             raise credentials_exception
@@ -39,6 +63,7 @@ async def get_current_user(
         return {
             "email": user.email,
             "name": user.name,
+            "access_token": token,  # Pass through the original token
             "token_expires": user.token_expires.isoformat()
         }
         
@@ -185,24 +210,49 @@ async def auth_status(request: Request, db: Session = Depends(get_db)):
         
         token = auth_header.split(" ")[1]
         
-        # Find user by access token
-        user = db.query(User).filter_by(access_token=token).first()
-        
-        if not user or user.token_expires < datetime.utcnow():
+        # Decode token to get email
+        try:
+            token_parts = token.split('.')
+            if len(token_parts) != 3:
+                return {"isAuthenticated": False, "user": None}
+            
+            # Fix padding for base64
+            payload = token_parts[1] + '=' * (-len(token_parts[1]) % 4)
+            decoded_payload = base64.b64decode(payload)
+            token_info = json.loads(decoded_payload)
+            
+            # Extract email from token
+            email = (
+                token_info.get("emails", [None])[0] or
+                token_info.get("email") or
+                token_info.get("preferred_username")
+            )
+            
+            if not email:
+                return {"isAuthenticated": False, "user": None}
+            
+            # Find user by email
+            user = db.query(User).filter_by(email=email).first()
+            
+            if not user or user.token_expires < datetime.utcnow():
+                return {"isAuthenticated": False, "user": None}
+                
+            return {
+                "isAuthenticated": True,
+                "user": {
+                    "email": user.email,
+                    "name": user.name,
+                    "token_expires": user.token_expires.isoformat()
+                }
+            }
+        except Exception as e:
+            print(f"Token decode error: {str(e)}")
             return {"isAuthenticated": False, "user": None}
             
-        return {
-            "isAuthenticated": True,
-            "user": {
-                "email": user.email,
-                "name": user.name,
-                "token_expires": user.token_expires.isoformat()
-            }
-        }
     except Exception as e:
         print(f"Status check error: {str(e)}")
         return {"isAuthenticated": False, "user": None}
-
+    
 @router.get("/logout")
 async def logout():
     """Handle user logout"""

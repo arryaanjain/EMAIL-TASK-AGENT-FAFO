@@ -1,46 +1,187 @@
-from fastapi import APIRouter, HTTPException, Depends, Query
-from typing import List
-from models.email import EmailProcess, EmailResponse
-from services.ms_graph import fetch_unread_emails
-from services.task_extraction import process_email, TaskExtractionResult
+from fastapi import APIRouter, HTTPException, Depends, Query, Request
+from typing import List, Optional
+from models.email import EmailResponse, EmailStats, EmailCreate, EmailFilter
+from services.ms_graph import MSGraphService
 from .auth import get_current_user
+from sqlalchemy.orm import Session
+from db import get_db
+import httpx
+from config import Config
+import requests
 
 router = APIRouter()
 
-@router.get("/unread", response_model=List[EmailResponse])
-async def get_unread_emails(
-    limit: int = Query(default=10, ge=1, le=50),
-    user = Depends(get_current_user)
+@router.get("/test-msgraph")
+async def test_msgraph_connection(
+    request: Request,
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
-    """
-    Fetch unread emails
-    Args:
-        limit: Number of emails to fetch (1-50)
-        user: Current authenticated user
-    """
+    """Test Microsoft Graph connection"""
     try:
-        emails = fetch_unread_emails(user, limit)
+        # Get app-only token for Graph API
+        token_data = {
+            "client_id": Config.APP_ID,  # Use APP_ID instead of CLIENT_ID
+            "client_secret": Config.CLIENT_SECRET,
+            "scope": "https://graph.microsoft.com/.default",
+            "grant_type": "client_credentials"
+        }
+
+        # Use the dedicated Graph token endpoint
+        token_endpoint = Config.get_graph_token_endpoint()
+        
+        print(f"Requesting token from: {token_endpoint}")  # Debug logging
+        print(f"Using client_id: {Config.APP_ID}")  # Debug logging
+        
+        token_response = requests.post(token_endpoint, data=token_data)
+        
+        if token_response.status_code != 200:
+            print(f"Token response: {token_response.text}")  # Debug logging
+            return {
+                "status": "error",
+                "message": f"Failed to get Graph token: {token_response.text}",
+                "status_code": token_response.status_code
+            }
+            
+        graph_token = token_response.json().get("access_token")
+        
+        # Test with users/count endpoint
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://graph.microsoft.com/v1.0/users/count",
+                headers={
+                    "Authorization": f"Bearer {graph_token}",
+                    "Content-Type": "application/json"
+                }
+            )
+            
+            if response.status_code != 200:
+                print(f"Graph API response: {response.text}")  # Debug logging
+                return {
+                    "status": "error",
+                    "message": f"Failed to connect: {response.text}",
+                    "status_code": response.status_code
+                }
+                
+            return {
+                "status": "success",
+                "data": response.json()
+            }
+            
+    except Exception as e:
+        print(f"Error: {str(e)}")  # Debug logging
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+@router.get("/inbox", response_model=List[EmailResponse])
+async def get_inbox_emails(
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get first 50 emails from inbox"""
+    try:
+        graph_service = MSGraphService(user.access_token)
+        emails = await graph_service.get_folder_emails(
+            folder="inbox",
+            skip=0,
+            limit=50,
+            filter=EmailFilter(is_read=None)
+        )
+        return emails
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch inbox: {str(e)}"
+        )
+
+
+@router.get("/stats", response_model=EmailStats)
+async def get_email_stats(
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get email statistics including unread count, tasks, and meetings"""
+    try:
+        graph_service = MSGraphService(user.access_token)
+        stats = await graph_service.get_email_stats()
+        return stats
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/search", response_model=List[EmailResponse])
+async def search_emails(
+    query: str,
+    folder: Optional[str] = None,
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Search emails with given criteria"""
+    try:
+        graph_service = MSGraphService(user.access_token)
+        results = await graph_service.search_emails(query, folder)
+        return results
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/send", response_model=EmailResponse)
+async def send_email(
+    email: EmailCreate,
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Send a new email"""
+    try:
+        graph_service = MSGraphService(user.access_token)
+        sent_email = await graph_service.send_email(email)
+        return sent_email
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/{folder}", response_model=List[EmailResponse])
+async def get_folder_emails(
+    folder: str,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=100),
+    filter: EmailFilter = None,
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get emails from a specific folder (inbox, sent, drafts, etc.)"""
+    try:
+        graph_service = MSGraphService(user.access_token)
+        emails = await graph_service.get_folder_emails(folder, skip, limit, filter)
         return emails
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
-@router.post("/process", response_model=TaskExtractionResult)
-async def process_emails(
-    email_data: EmailProcess,
-    user = Depends(get_current_user)
+
+@router.post("/{email_id}/mark-read")
+async def mark_as_read(
+    email_id: str,
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
-    """
-    Process emails for task extraction
-    Args:
-        email_data: Email content to process
-        user: Current authenticated user
-    Returns:
-        Extracted tasks and summary
-    """
+    """Mark an email as read"""
     try:
-        result = process_email(email_data.subject, email_data.body)
-        return result
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        graph_service = MSGraphService(user.access_token)
+        await graph_service.mark_as_read(email_id)
+        return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/{email_id}/process-tasks")
+async def process_email_tasks(
+    email_id: str,
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Process email for tasks using LangGraph"""
+    try:
+        graph_service = MSGraphService(user.access_token)
+        email_content = await graph_service.get_email_content(email_id)
+        # TODO: Implement LangGraph processing
+        return {"status": "processing", "email_id": email_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

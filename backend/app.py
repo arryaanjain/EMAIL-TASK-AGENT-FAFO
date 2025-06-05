@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from api import auth, email, tasks
+from api.email import router as email_router
+from api.auth import router as auth_router
+from api.tasks import router as tasks_router
 from db import init_db
 
 app = FastAPI(title="Email Task Agent")
@@ -18,9 +20,9 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
-app.include_router(email.router, prefix="/api/email", tags=["email"])
-app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
+app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
+app.include_router(email_router, prefix="/api/email", tags=["email"])
+app.include_router(tasks_router, prefix="/api/tasks", tags=["tasks"])
 
 if __name__ == "__main__":
     import uvicorn

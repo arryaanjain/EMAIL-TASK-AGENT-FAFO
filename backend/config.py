@@ -33,10 +33,25 @@ class Config:
     REDIRECT_URI = get_env_variable("REDIRECT_URI")
     FRONT_END_BASE_URL = get_env_variable("FRONT_END_BASE_URL")
     
-    # Azure B2C Configuration
+    # Azure AD B2C Configuration
     TENANT = "emailagentnew"
+    TENANT_ID = "0552319c-fc2d-4873-a78e-7a89e1d1d075"  # API project tenant ID
+    APP_ID = "e707da51-2c56-4241-bfa9-e6ca7e0b54c8"     # API project app ID
     POLICY = "B2C_1_signup_signin"
 
+    B2C_SCOPES = [
+        "openid",
+        "offline_access",
+        f"https://{TENANT}.onmicrosoft.com/emailagent-api/access_as_user"
+    ]
+
+    # Microsoft Graph scopes - updated to use correct format
+    GRAPH_SCOPES = [
+        "https://graph.microsoft.com/Mail.Read",
+        "https://graph.microsoft.com/Mail.Send",
+        "https://graph.microsoft.com/User.Read.All",
+        "https://graph.microsoft.com/Calendars.ReadWrite"
+    ]
     @classmethod
     def get_authority(cls) -> str:
         return f"https://{cls.TENANT}.b2clogin.com/{cls.TENANT}.onmicrosoft.com/{cls.POLICY}"
@@ -47,16 +62,13 @@ class Config:
 
     @classmethod
     def get_scopes(cls) -> str:
-        """Get properly formatted scope string for Azure B2C"""
-        scopes = [
-            "openid",
-            "offline_access",
-            f"https://{cls.TENANT}.onmicrosoft.com/emailagent-api/access_as_user"
-        ]
-        return ' '.join(scopes)
+        """Get properly formatted scope string including both B2C and Graph scopes"""
+        return ' '.join(cls.B2C_SCOPES + cls.GRAPH_SCOPES)
+    
     @classmethod
-    def get_token_endpoint(cls) -> str:
-        return f"{cls.get_authority()}/oauth2/v2.0/token"
+    def get_graph_token_endpoint(cls) -> str:
+        """Get Microsoft Graph token endpoint"""
+        return f"https://login.microsoftonline.com/{cls.TENANT_ID}/oauth2/v2.0/token"
     
     @classmethod
     def get_authorize_endpoint(cls) -> str:
@@ -84,6 +96,12 @@ class Config:
     def get_database_url(cls) -> str:
         """Get database URL as string"""
         return f"postgresql://{cls.DB_USER}:{cls.DB_PASSWORD}@{cls.DB_HOST}:{cls.DB_PORT}/{cls.DB_NAME}"
+
+    # Separate B2C token endpoint
+    @classmethod
+    def get_b2c_token_endpoint(cls) -> str:
+        """Get B2C token endpoint"""
+        return f"{cls.get_authority()}/oauth2/v2.0/token"
 
     @classmethod
     def validate(cls) -> None:
