@@ -34,9 +34,8 @@ class Config:
     FRONT_END_BASE_URL = get_env_variable("FRONT_END_BASE_URL")
     
     # Azure AD B2C Configuration
-    TENANT = "emailagentnew"
-    TENANT_ID = "0552319c-fc2d-4873-a78e-7a89e1d1d075"  # API project tenant ID
-    APP_ID = "e707da51-2c56-4241-bfa9-e6ca7e0b54c8"     # API project app ID
+    TENANT =get_env_variable("TENANT")
+    TENANT_ID = get_env_variable("TENANT_ID")  # API project tenant ID
     POLICY = "B2C_1_signup_signin"
 
     B2C_SCOPES = [
@@ -48,9 +47,9 @@ class Config:
     # Microsoft Graph scopes - updated to use correct format
     GRAPH_SCOPES = [
         "https://graph.microsoft.com/Mail.Read",
-        "https://graph.microsoft.com/Mail.Send",
-        "https://graph.microsoft.com/User.Read.All",
-        "https://graph.microsoft.com/Calendars.ReadWrite"
+        # "https://graph.microsoft.com/Mail.Send",
+        # "https://graph.microsoft.com/User.Read.All",
+        # "https://graph.microsoft.com/Calendars.ReadWrite"
     ]
     @classmethod
     def get_authority(cls) -> str:

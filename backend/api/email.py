@@ -76,25 +76,24 @@ async def test_msgraph_connection(
         }
 
 @router.get("/inbox", response_model=List[EmailResponse])
-async def get_inbox_emails(
-    user = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Get first 50 emails from inbox"""
-    try:
-        graph_service = MSGraphService(user.access_token)
-        emails = await graph_service.get_folder_emails(
-            folder="inbox",
-            skip=0,
-            limit=50,
-            filter=EmailFilter(is_read=None)
+async def read_emails(request: Request):
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing access token")
+
+    token = auth_header.split(" ")[1]
+
+    # Make Graph API call
+    async with httpx.AsyncClient() as client:
+        graph_response = await client.get(
+            "https://graph.microsoft.com/v1.0/me/messages?$filter=isRead eq false",
+            headers={"Authorization": f"Bearer {token}"}
         )
-        return emails
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to fetch inbox: {str(e)}"
-        )
+
+    if graph_response.status_code != 200:
+        raise HTTPException(status_code=graph_response.status_code, detail=graph_response.text)
+
+    return graph_response.json()
 
 
 @router.get("/stats", response_model=EmailStats)
