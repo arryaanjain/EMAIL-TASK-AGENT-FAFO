@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../utils/axiosInterceptor';
+import { fetchUnreadEmails } from '../api/emailService';
 
 interface Email {
   id: string;
@@ -34,6 +35,17 @@ const Dashboard: React.FC = () => {
       setLoading(false);
     }
   };
+
+  const handleFetchEmails = async () => {
+    try {
+      const emails = await fetchUnreadEmails();
+      console.log("Unread emails:", emails);
+    } catch (err) {
+      alert("Unable to fetch emails. Check console for details.");
+    }
+  };
+
+  handleFetchEmails();
 
   const handleLogout = () => {
     localStorage.clear();
