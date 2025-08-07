@@ -5,6 +5,8 @@ from api.auth import router as auth_router
 from api.tasks import router as tasks_router
 from db import init_db
 
+from starlette.middleware.sessions import SessionMiddleware
+
 app = FastAPI(title="Email Task Agent")
 
 # Database initialization
@@ -19,11 +21,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_middleware(SessionMiddleware, secret_key="your-secret-key")
+
 # Include routers
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(email_router, prefix="/api/email", tags=["email"])
 app.include_router(tasks_router, prefix="/api/tasks", tags=["tasks"])
 
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=5000, reload=True)
+    uvicorn.run("app:app", host="127.0.0.1", port=5000, reload=True)

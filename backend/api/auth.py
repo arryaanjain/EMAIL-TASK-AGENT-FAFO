@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, Request, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
@@ -16,9 +16,20 @@ from db import get_db
 import base64
 import json
 
+import secrets
+import hashlib
+
 # Security setup
 security = HTTPBearer()
 router = APIRouter()
+
+# Generate PKCE values
+def generate_pkce_pair():
+    verifier = secrets.token_urlsafe(64)
+    challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(verifier.encode()).digest()
+    ).decode().rstrip("=")
+    return verifier, challenge
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
@@ -71,25 +82,33 @@ async def get_current_user(
         raise credentials_exception
 
 @router.get("/login")
-async def login():
+async def login(request: Request):
     """Redirect to Microsoft login"""
     base_url = Config.get_authorize_endpoint()
+    code_verifier, code_challenge = generate_pkce_pair()
+    request.session["code_verifier"] = code_verifier
     params = {
         "client_id": Config.CLIENT_ID,
         "response_type": "code",
         "redirect_uri": Config.REDIRECT_URI,
         "response_mode": "query",
         "scope": Config.get_scopes(),
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256"
     }
     login_url = f"{base_url}?{urllib.parse.urlencode(params)}"
     return RedirectResponse(url=login_url)
 
 @router.get("/callback")
 async def auth_callback(
+    request: Request,
     code: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """Handle Microsoft OAuth callback"""
+    code_verifier = request.session.get("code_verifier")
+    if not code_verifier:
+        return HTMLResponse("Code verifier missing from session", status_code=400)
     if not code:
         raise HTTPException(status_code=400, detail="Authorization code not found")
     
@@ -99,10 +118,9 @@ async def auth_callback(
         token_data = {
             "grant_type": "authorization_code",
             "client_id": Config.CLIENT_ID,
-            "client_secret": Config.CLIENT_SECRET,
             "code": code,
             "redirect_uri": Config.REDIRECT_URI,
-            "scope": Config.get_scopes()
+            "code_verifier": code_verifier
         }
 
         print("Exchanging code for tokens...")
